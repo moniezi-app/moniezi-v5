@@ -321,7 +321,7 @@ const StatCard: React.FC<{
 }) => (
   <div 
     onClick={onClick}
-    className={`bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-md transition-all duration-300 group ${onClick ? 'cursor-pointer active:scale-95 hover:border-blue-500/50 hover:shadow-lg' : ''}`}
+    className={`bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-md transition-all duration-300 group overflow-hidden ${onClick ? 'cursor-pointer active:scale-95 hover:border-blue-500/50 hover:shadow-lg' : ''}`}
   >
     <div className="flex justify-between items-start mb-4">
         <div className="bg-slate-100 dark:bg-slate-950 p-3 rounded-lg text-slate-600 dark:text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-all">
@@ -329,9 +329,9 @@ const StatCard: React.FC<{
         </div>
         {onClick && <ArrowRight size={16} className="text-slate-400 dark:text-slate-300 -rotate-45 group-hover:rotate-0 group-hover:text-blue-500 transition-all duration-300" />}
     </div>
-    <div className={`text-3xl font-bold tracking-tight mb-1 ${colorClass}`}>{value}</div>
-    <div className="flex justify-between items-end">
-        <label className="text-base font-semibold text-slate-600 dark:text-slate-300">{label}</label>
+    <div className={`text-2xl font-bold tracking-tight mb-1 break-words ${colorClass}`}>{value}</div>
+    <div className="flex justify-between items-end min-w-0">
+        <label className="text-base font-semibold text-slate-600 dark:text-slate-300 truncate">{label}</label>
     </div>
     {subText && <div className={`text-xs mt-2 font-bold inline-block px-3 py-1 rounded-md ${subTextClass || 'bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-300'}`}>{subText}</div>}
   </div>
@@ -520,6 +520,10 @@ export default function App() {
   const [ledgerFilter, setLedgerFilter] = useState<'all' | 'income' | 'expense' | 'invoice'>('all');
   const [lastYearCalc, setLastYearCalc] = useState({ profit: '', tax: '' });
   const [selectedInvoiceForDoc, setSelectedInvoiceForDoc] = useState<Invoice | null>(null);
+  const [showPLPreview, setShowPLPreview] = useState(false);
+  const [plExportRequested, setPlExportRequested] = useState(false);
+  const [isGeneratingPLPdf, setIsGeneratingPLPdf] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [seedSuccess, setSeedSuccess] = useState(false);
@@ -1186,6 +1190,12 @@ export default function App() {
      setInvoices(prev => prev.map(i => i.id === updatedInvoice.id ? updatedInvoice : i));
      setSelectedInvoiceForDoc(updatedInvoice); setIsPdfPreviewOpen(true);
   };
+  const handleExportPLPDF = () => {
+    setPlExportRequested(true);
+    setShowPLPreview(true);
+  };
+
+
   
   useEffect(() => {
      let isMounted = true;
@@ -1210,6 +1220,75 @@ export default function App() {
      if (isPdfPreviewOpen) generatePdf();
      return () => { isMounted = false; };
   }, [isPdfPreviewOpen, selectedInvoiceForDoc]);
+
+
+  useEffect(() => {
+    let isMounted = true;
+    const generatePLPdf = async () => {
+      if (!showPLPreview || !plExportRequested || isGeneratingPLPdf) return;
+
+      setIsGeneratingPLPdf(true);
+      // Let the modal render fully
+      await new Promise(resolve => setTimeout(resolve, 350));
+
+      try {
+        const element = document.getElementById('pl-pdf-preview-content');
+        if (!element) throw new Error("P&L preview element not found");
+
+        // Wait for any images (logo) to finish loading
+        const images = Array.from(element.querySelectorAll('img'));
+        await Promise.all(images.map(img => {
+          const anyImg = img as HTMLImageElement;
+          if (anyImg.complete) return Promise.resolve(true);
+          return new Promise(resolve => {
+            anyImg.onload = () => resolve(true);
+            anyImg.onerror = () => resolve(true);
+            setTimeout(() => resolve(true), 2000);
+          });
+        }));
+
+        const periodLabel =
+          filterPeriod === 'month'
+            ? referenceDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+            : filterPeriod === 'quarter'
+              ? `Q${Math.floor(referenceDate.getMonth() / 3) + 1}_${referenceDate.getFullYear()}`
+              : filterPeriod === 'year'
+                ? referenceDate.getFullYear().toString()
+                : 'All_Time';
+
+        const safeLabel = String(periodLabel).replace(/[^a-z0-9]/gi, '_');
+        const opt = {
+          margin: [10, 10, 10, 10],
+          filename: `Profit_Loss_${safeLabel}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        await (window as any).html2pdf().set(opt).from(element).save();
+
+        if (isMounted) {
+          showToast("P&L PDF Downloaded", "success");
+          setPlExportRequested(false);
+          setTimeout(() => setShowPLPreview(false), 1000);
+        }
+      } catch (error) {
+        console.error("P&L PDF failed:", error);
+        if (isMounted) {
+          showToast("P&L PDF export failed", "error");
+          setPlExportRequested(false);
+        }
+      } finally {
+        if (isMounted) setIsGeneratingPLPdf(false);
+      }
+    };
+
+    if (showPLPreview && plExportRequested) generatePLPdf();
+
+    return () => { isMounted = false; };
+  }, [showPLPreview, plExportRequested, filterPeriod, referenceDate]);
+
+
 
   const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -1657,15 +1736,15 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
             <div className="bg-white dark:bg-gradient-to-br dark:from-blue-800 dark:to-indigo-950 p-8 rounded-xl shadow-xl dark:shadow-none border border-slate-200 dark:border-white/10 relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-80 h-80 bg-slate-100/50 dark:bg-white/5 rounded-full blur-3xl -mr-20 -mt-20 group-hover:bg-slate-200/50 transition-colors duration-700 pointer-events-none" />
               <label className="text-xs font-bold text-slate-500 dark:text-blue-200 mb-1 block tracking-widest uppercase font-brand">Net Profit</label>
-              <div className="text-5xl font-extrabold tracking-tighter mb-8 text-slate-950 dark:text-white font-brand">{formatCurrency.format(totals.profit)}</div>
-              <div className="flex items-center gap-4">
-                <div className="bg-slate-50 dark:bg-white/10 backdrop-blur-md px-5 py-3.5 rounded-lg flex-1 border border-slate-200 dark:border-white/5">
-                   <div className="flex items-center gap-2 mb-1 text-emerald-600 dark:text-emerald-300"><TrendingUp size={16} strokeWidth={2.5} /><span className="text-xs font-bold uppercase tracking-wide">In</span></div>
-                   <div className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency.format(totals.income)}</div>
+              <div className="text-4xl font-extrabold tracking-tighter mb-8 text-slate-950 dark:text-white font-brand">{formatCurrency.format(totals.profit)}</div>
+              <div className="flex items-center justify-center gap-4">
+                <div className="bg-slate-50 dark:bg-white/10 backdrop-blur-md px-5 py-3.5 rounded-lg border border-slate-200 dark:border-white/5 min-w-[160px]">
+                   <div className="flex items-center justify-center gap-2 mb-1 text-emerald-600 dark:text-emerald-300"><TrendingUp size={16} strokeWidth={2.5} /><span className="text-xs font-bold uppercase tracking-wide">In</span></div>
+                   <div className="text-xl font-bold text-slate-900 dark:text-white text-center">{formatCurrency.format(totals.income)}</div>
                 </div>
-                <div className="bg-slate-50 dark:bg-white/10 backdrop-blur-md px-5 py-3.5 rounded-lg flex-1 border border-slate-200 dark:border-white/5">
-                   <div className="flex items-center gap-2 mb-1 text-red-600 dark:text-red-300"><TrendingDown size={16} strokeWidth={2.5} /><span className="text-xs font-bold uppercase tracking-wide">Out</span></div>
-                   <div className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency.format(totals.expense)}</div>
+                <div className="bg-slate-50 dark:bg-white/10 backdrop-blur-md px-5 py-3.5 rounded-lg border border-slate-200 dark:border-white/5 min-w-[160px]">
+                   <div className="flex items-center justify-center gap-2 mb-1 text-red-600 dark:text-red-300"><TrendingDown size={16} strokeWidth={2.5} /><span className="text-xs font-bold uppercase tracking-wide">Out</span></div>
+                   <div className="text-xl font-bold text-slate-900 dark:text-white text-center">{formatCurrency.format(totals.expense)}</div>
                 </div>
               </div>
             </div>
@@ -1685,9 +1764,40 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-               <StatCard label="Profit Margin" value={totals.income > 0 ? `${((totals.profit / totals.income) * 100).toFixed(1)}%` : "—"} onClick={() => setCurrentPage(Page.Reports)} subText="YTD" icon={<TrendingUp size={24} strokeWidth={1.5} />} />
-               <StatCard label={totals.overdueAmount > 0 ? "Actions Needed" : "Pending"} value={formatCurrency.format(totals.pendingAmount)} colorClass={totals.overdueAmount > 0 ? "text-red-600 dark:text-red-400" : undefined} onClick={() => setCurrentPage(Page.Invoices)} subText={totals.overdueAmount > 0 ? "Has Overdue" : "Unpaid"} subTextClass={totals.overdueAmount > 0 ? "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300" : undefined} icon={totals.overdueAmount > 0 ? <AlertCircle size={24} strokeWidth={1.5} className="text-red-500" /> : <FileText size={24} strokeWidth={1.5} />} />
+            <div className="bg-white dark:bg-slate-950 text-slate-900 dark:text-white p-6 rounded-xl shadow-md border border-slate-200 dark:border-slate-800">
+               <div className="grid grid-cols-2 gap-6">
+                  {/* Profit Margin */}
+                  <div className="flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/30 p-4 rounded-lg transition-colors" onClick={() => setCurrentPage(Page.Reports)}>
+                     <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-3">
+                        <TrendingUp size={24} strokeWidth={1.5} className="text-slate-700 dark:text-slate-300" />
+                     </div>
+                     <div className="text-2xl font-bold text-slate-900 dark:text-white mb-1">
+                        {totals.income > 0 ? `${((totals.profit / totals.income) * 100).toFixed(1)}%` : "—"}
+                     </div>
+                     <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-1">Profit Margin</div>
+                     <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider bg-slate-100 dark:bg-slate-900 px-3 py-1 rounded-full">YTD</div>
+                  </div>
+
+                  {/* Actions Needed / Pending */}
+                  <div className="flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/30 p-4 rounded-lg transition-colors border-l border-slate-200 dark:border-slate-800" onClick={() => setCurrentPage(Page.Invoices)}>
+                     <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${totals.overdueAmount > 0 ? 'bg-red-100 dark:bg-red-950/40' : 'bg-slate-100 dark:bg-slate-900'}`}>
+                        {totals.overdueAmount > 0 ? (
+                           <AlertCircle size={24} strokeWidth={1.5} className="text-red-500" />
+                        ) : (
+                           <FileText size={24} strokeWidth={1.5} className="text-slate-700 dark:text-slate-300" />
+                        )}
+                     </div>
+                     <div className={`text-2xl font-bold mb-1 ${totals.overdueAmount > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>
+                        {formatCurrency.format(totals.pendingAmount)}
+                     </div>
+                     <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-1">
+                        {totals.overdueAmount > 0 ? "Actions Needed" : "Pending"}
+                     </div>
+                     <div className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full ${totals.overdueAmount > 0 ? 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300' : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400'}`}>
+                        {totals.overdueAmount > 0 ? "Has Overdue" : "Unpaid"}
+                     </div>
+                  </div>
+               </div>
             </div>
             
             <div>
@@ -1748,8 +1858,10 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
              <div className="flex items-center justify-between mb-2 pl-2">
                  <div className="flex items-center gap-3">
-                     <div className={`p-2.5 rounded-lg ${currentPage === Page.Income ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : currentPage === Page.Expenses ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-500' : 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400'}`}>{currentPage === Page.Income ? <TrendingUp size={24} strokeWidth={1.5}/> : currentPage === Page.Expenses ? <TrendingDown size={24} strokeWidth={1.5}/> : <History size={24} strokeWidth={1.5} />}</div>
-                     <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white font-brand">{currentPage === Page.Income ? 'Income' : currentPage === Page.Expenses ? 'Expenses' : 'Ledger'}</h2>
+                     <div className="flex items-center gap-3">
+                       <div className={`p-2.5 rounded-lg ${currentPage === Page.Income ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : currentPage === Page.Expenses ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-500' : 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400'}`}>{currentPage === Page.Income ? <TrendingUp size={24} strokeWidth={1.5}/> : currentPage === Page.Expenses ? <TrendingDown size={24} strokeWidth={1.5}/> : <History size={24} strokeWidth={1.5} />}</div>
+                       <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white font-brand">{currentPage === Page.Income ? 'Income' : currentPage === Page.Expenses ? 'Expenses' : 'Ledger'}</h2>
+                     </div>
                  </div>
                  {(currentPage === Page.Income || currentPage === Page.Expenses || currentPage === Page.AllTransactions) && (
                     <button onClick={() => handleOpenFAB(getHeaderFabType())} className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-500 transition-all"><Plus size={24} strokeWidth={2.5} /></button>
@@ -1808,8 +1920,13 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
 
         {currentPage === Page.Invoices && (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            <div className="flex items-center justify-between pl-2">
-              <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white font-brand">Invoices</h2>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                  <FileText size={24} strokeWidth={1.5} />
+                </div>
+                <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white font-brand">Invoices</h2>
+              </div>
               <button onClick={() => handleOpenFAB('billing')} className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-500 transition-all"><Plus size={24} strokeWidth={2.5} /></button>
             </div>
             <PeriodSelector period={filterPeriod} setPeriod={setFilterPeriod} refDate={referenceDate} setRefDate={setReferenceDate} />
@@ -1860,7 +1977,12 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
 
         {currentPage === Page.Reports && (
            <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
-              <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white pl-2 font-brand">Reports</h2>
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                  <BarChart3 size={24} strokeWidth={1.5} />
+                </div>
+                <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white font-brand">Reports</h2>
+              </div>
               <div ref={taxSnapshotRef} className="bg-white dark:bg-slate-950 text-slate-900 dark:text-white p-8 rounded-lg shadow-xl relative overflow-hidden border border-slate-200 dark:border-slate-800">
                 <div className="absolute top-0 right-0 w-80 h-80 bg-blue-50 dark:bg-blue-600/20 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
                 <div className="flex items-center justify-between mb-8 relative z-10">
@@ -2362,14 +2484,285 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                         </div>
                     )}
                 </div>
-              <div className="bg-white dark:bg-slate-900 p-8 rounded-lg border border-slate-200 dark:border-slate-800 shadow-xl">
-                <div className="flex items-center gap-3 mb-8"><BarChart3 size={24} strokeWidth={2} className="text-blue-600 dark:text-blue-400" /><h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white uppercase tracking-tight font-brand">Profit & Loss <span className="text-slate-500 dark:text-slate-300 text-sm normal-case tracking-normal ml-2">(Current Period)</span></h3></div>
+              {/* Enhanced Profit & Loss Statement */}
+              <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl">
+                {/* Header with Actions */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <BarChart3 size={24} strokeWidth={2} className="text-blue-600 dark:text-blue-400" />
+                    <div>
+                      <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white uppercase tracking-tight font-brand">
+                        Profit & Loss
+                      </h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                        {filterPeriod === 'month' ? referenceDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) :
+                         filterPeriod === 'quarter' ? `Q${Math.floor(referenceDate.getMonth() / 3) + 1} ${referenceDate.getFullYear()}` :
+                         filterPeriod === 'year' ? referenceDate.getFullYear().toString() : 'All Time'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Actions */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setPlExportRequested(false); setShowPLPreview(true); }}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm flex items-center gap-2 transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span className="hidden sm:inline">Preview</span>
+                    </button>
+
+                    <button
+                      onClick={handleExportPLPDF}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm flex items-center gap-2 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span className="hidden sm:inline">Export PDF</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Compact Summary - Left Aligned */}
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center py-4 border-b border-slate-100 dark:border-slate-800"><span className="text-base font-bold text-slate-600 dark:text-slate-300">Revenue</span><span className="text-xl font-bold text-emerald-600">{formatCurrency.format(reportData.income)}</span></div>
-                  <div className="flex justify-between items-center py-4 border-b border-slate-100 dark:border-slate-800"><span className="text-base font-bold text-slate-600 dark:text-slate-300">Deductible Expenses</span><span className="text-xl font-bold text-red-600">{formatCurrency.format(reportData.expense)}</span></div>
-                  <div className="flex justify-between items-center pt-8"><span className="text-lg font-extrabold text-slate-950 dark:text-white">Net Profit</span><span className="text-3xl font-extrabold text-slate-950 dark:text-white font-brand">{formatCurrency.format(reportData.netProfit)}</span></div>
+                  <div className="py-3 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Revenue</span>
+                    </div>
+                    <div className="text-2xl font-bold text-emerald-600 tabular-nums">{formatCurrency.format(reportData.income)}</div>
+                  </div>
+                  
+                  <div className="py-3 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Operating Expenses</span>
+                    </div>
+                    <div className="text-2xl font-bold text-red-600 tabular-nums">{formatCurrency.format(reportData.expense)}</div>
+                  </div>
+                  
+                  <div className="pt-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-base font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Net Profit</span>
+                      <span className="text-sm text-slate-500 dark:text-slate-400">
+                        {reportData.income > 0 ? `${((reportData.netProfit / reportData.income) * 100).toFixed(1)}% margin` : '—'}
+                      </span>
+                    </div>
+                    <div className={`text-4xl font-bold tabular-nums ${reportData.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {formatCurrency.format(reportData.netProfit)}
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              {/* P&L Preview Modal */}
+              {showPLPreview && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                    {/* Modal Header */}
+                    <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800">
+                      <div className="flex items-center gap-2">
+                        {isGeneratingPLPdf ? (
+                          <Loader2 className="animate-spin text-blue-600" size={18} />
+                        ) : plExportRequested ? (
+                          <Download className="text-emerald-600" size={18} />
+                        ) : (
+                          <Eye className="text-blue-600" size={18} />
+                        )}
+                        <span className="font-bold text-sm uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                          {isGeneratingPLPdf ? 'Generating PDF...' : plExportRequested ? 'Exporting PDF...' : 'Previewing P&L'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {!isGeneratingPLPdf && !plExportRequested && (
+                          <button
+                            onClick={() => setPlExportRequested(true)}
+                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm flex items-center gap-2 transition-colors"
+                          >
+                            <Download className="w-4 h-4" />
+                            <span className="hidden sm:inline">Export PDF</span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => { setPlExportRequested(false); setShowPLPreview(false); }}
+                          className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* PDF Preview Content */}
+                    <div className="flex-1 overflow-y-auto p-8 bg-slate-50 dark:bg-slate-950">
+                      <div id="pl-pdf-preview-content" className="max-w-3xl mx-auto bg-white dark:bg-slate-900 p-12 shadow-lg rounded-lg">
+                        {/* Header */}
+                        <div className="text-center mb-8 pb-6 border-b-2 border-slate-300 dark:border-slate-700">
+                          <Building size={32} className="mx-auto mb-3 text-blue-600" />
+                          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{settings.businessName}</h1>
+                          {settings.businessAddress && <p className="text-sm text-slate-600 dark:text-slate-400">{settings.businessAddress}</p>}
+                          <div className="mt-4">
+                            <h2 className="text-xl font-bold text-slate-900 dark:text-white uppercase">Profit & Loss Statement</h2>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                              Period: {filterPeriod === 'month' ? referenceDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) :
+                                      filterPeriod === 'quarter' ? `Q${Math.floor(referenceDate.getMonth() / 3) + 1} ${referenceDate.getFullYear()}` :
+                                      filterPeriod === 'year' ? referenceDate.getFullYear().toString() : 'All Time'}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                              Generated: {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Revenue Section */}
+                        <div className="mb-8">
+                          <div className="flex items-center gap-2 mb-4">
+                            <TrendingUp className="w-5 h-5 text-emerald-600" />
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase">Revenue</h3>
+                          </div>
+                          <div className="space-y-2 ml-7">
+                            {(() => {
+                              const incomeByCategory = filteredTransactions.filter(t => t.type === 'income').reduce((acc, t) => {
+                                acc[t.category] = (acc[t.category] || 0) + t.amount;
+                                return acc;
+                              }, {} as Record<string, number>);
+                              return Object.entries(incomeByCategory).map(([category, amount]) => (
+                                <div key={category} className="flex justify-between items-center py-2">
+                                  <span className="text-sm text-slate-700 dark:text-slate-300">{category}</span>
+                                  <span className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">{formatCurrency.format(amount)}</span>
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                          <div className="flex justify-between items-center py-3 mt-2 border-t border-slate-300 dark:border-slate-700">
+                            <span className="font-bold text-slate-900 dark:text-white">Total Revenue</span>
+                            <span className="text-lg font-bold text-emerald-600 tabular-nums">{formatCurrency.format(reportData.income)}</span>
+                          </div>
+                        </div>
+
+                        {/* Expenses Section */}
+                        <div className="mb-8">
+                          <div className="flex items-center gap-2 mb-4">
+                            <TrendingDown className="w-5 h-5 text-red-600" />
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase">Operating Expenses</h3>
+                          </div>
+                          <div className="space-y-2 ml-7">
+                            {(() => {
+                              const expensesByCategory = filteredTransactions.filter(t => t.type === 'expense').reduce((acc, t) => {
+                                acc[t.category] = (acc[t.category] || 0) + t.amount;
+                                return acc;
+                              }, {} as Record<string, number>);
+                              return Object.entries(expensesByCategory).map(([category, amount]) => (
+                                <div key={category} className="flex justify-between items-center py-2">
+                                  <span className="text-sm text-slate-700 dark:text-slate-300">{category}</span>
+                                  <span className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">{formatCurrency.format(amount)}</span>
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                          <div className="flex justify-between items-center py-3 mt-2 border-t border-slate-300 dark:border-slate-700">
+                            <span className="font-bold text-slate-900 dark:text-white">Total Expenses</span>
+                            <span className="text-lg font-bold text-red-600 tabular-nums">{formatCurrency.format(reportData.expense)}</span>
+                          </div>
+                        </div>
+
+                        {/* Net Profit Section */}
+                        <div className="pt-6 border-t-2 border-slate-900 dark:border-slate-300">
+                          <div className="flex justify-between items-center mb-4">
+                            <span className="text-xl font-bold text-slate-900 dark:text-white uppercase">Net Profit</span>
+                            <span className={`text-3xl font-bold tabular-nums ${reportData.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {formatCurrency.format(reportData.netProfit)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center py-2 bg-slate-50 dark:bg-slate-800 px-4 rounded">
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Profit Margin</span>
+                            <span className={`text-lg font-bold tabular-nums ${reportData.income > 0 && reportData.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {reportData.income > 0 ? `${((reportData.netProfit / reportData.income) * 100).toFixed(1)}%` : '—'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Summary Statistics */}
+                        <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+                          <h4 className="text-sm font-bold text-slate-600 dark:text-slate-400 uppercase mb-3">Transaction Summary</h4>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded">
+                              <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">Income Transactions</div>
+                              <div className="text-xl font-bold text-slate-900 dark:text-white">
+                                {filteredTransactions.filter(t => t.type === 'income').length}
+                              </div>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded">
+                              <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">Expense Transactions</div>
+                              <div className="text-xl font-bold text-slate-900 dark:text-white">
+                                {filteredTransactions.filter(t => t.type === 'expense').length}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800 text-center">
+                          <p className="text-xs text-slate-500 dark:text-slate-500">
+                            This statement has been prepared from the books of {settings.businessName}.
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                            For period ending {filterPeriod === 'month' ? referenceDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) :
+                                              filterPeriod === 'quarter' ? `Q${Math.floor(referenceDate.getMonth() / 3) + 1} ${referenceDate.getFullYear()}` :
+                                              filterPeriod === 'year' ? referenceDate.getFullYear().toString() : 'All Time'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Modal Footer */}
+                    <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200 dark:border-slate-800">
+                      <button
+                        onClick={() => setShowPLPreview(false)}
+                        className="px-6 py-3 border border-slate-300 dark:border-slate-700 rounded-lg font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        Close
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setIsGeneratingPDF(true);
+                          try {
+                            const element = document.getElementById('pl-pdf-preview-content');
+                            if (!element) throw new Error('Preview content not found');
+                            
+                            const periodLabel = filterPeriod === 'month' 
+                              ? referenceDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                              : filterPeriod === 'quarter' 
+                                ? `Q${Math.floor(referenceDate.getMonth() / 3) + 1} ${referenceDate.getFullYear()}`
+                                : filterPeriod === 'year'
+                                  ? referenceDate.getFullYear().toString()
+                                  : 'All-Time';
+                            
+                            const opt = {
+                              margin: [10, 10, 10, 10],
+                              filename: `PL-Statement-${periodLabel.replace(/\s+/g, '-')}.pdf`,
+                              image: { type: 'jpeg', quality: 0.98 },
+                              html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0 },
+                              jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                            };
+                            
+                            await (window as any).html2pdf().set(opt).from(element).save();
+                            showToast('PDF exported successfully!', 'success');
+                            setTimeout(() => setShowPLPreview(false), 1000);
+                          } catch (error) {
+                            console.error('PDF generation error:', error);
+                            showToast('Failed to generate PDF. Please try again.', 'error');
+                          }
+                          setIsGeneratingPDF(false);
+                        }}
+                        disabled={isGeneratingPDF}
+                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
+                      >
+                        <Download className="w-4 h-4" />
+                        {isGeneratingPDF ? 'Generating...' : 'Export PDF'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                  <div className="bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800 shadow-md"><div className="flex items-center gap-2 mb-4 text-emerald-600"><Shield size={20} /><span className="font-bold uppercase tracking-widest text-xs">Tax Shield</span></div><div className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">{formatCurrency.format(reportData.taxShield)}</div><p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Your expenses have lowered your estimated tax bill by this amount. Every valid business expense saves you money at tax time.</p></div>
                  <div className="bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800 shadow-md"><div className="flex items-center gap-2 mb-4 text-blue-600"><BookOpen size={20} /><span className="font-bold uppercase tracking-widest text-xs">2025 Standard Deduction</span></div><div className="flex justify-between items-end mb-2"><div className="text-3xl font-extrabold text-slate-900 dark:text-white">{formatCurrency.format(reportData.stdDeduction)}</div><span className="text-xs font-bold bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded capitalize text-slate-600 dark:text-slate-300">{settings.filingStatus}</span></div><p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Compare your personal itemized deductions against this standard amount. This affects your personal income tax, not SE tax.</p></div>

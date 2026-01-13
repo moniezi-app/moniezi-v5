@@ -521,6 +521,8 @@ export default function App() {
   const [lastYearCalc, setLastYearCalc] = useState({ profit: '', tax: '' });
   const [selectedInvoiceForDoc, setSelectedInvoiceForDoc] = useState<Invoice | null>(null);
   const [showPLPreview, setShowPLPreview] = useState(false);
+  const [plExportRequested, setPlExportRequested] = useState(false);
+  const [isGeneratingPLPdf, setIsGeneratingPLPdf] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -1188,6 +1190,12 @@ export default function App() {
      setInvoices(prev => prev.map(i => i.id === updatedInvoice.id ? updatedInvoice : i));
      setSelectedInvoiceForDoc(updatedInvoice); setIsPdfPreviewOpen(true);
   };
+  const handleExportPLPDF = () => {
+    setPlExportRequested(true);
+    setShowPLPreview(true);
+  };
+
+
   
   useEffect(() => {
      let isMounted = true;
@@ -1212,6 +1220,75 @@ export default function App() {
      if (isPdfPreviewOpen) generatePdf();
      return () => { isMounted = false; };
   }, [isPdfPreviewOpen, selectedInvoiceForDoc]);
+
+
+  useEffect(() => {
+    let isMounted = true;
+    const generatePLPdf = async () => {
+      if (!showPLPreview || !plExportRequested || isGeneratingPLPdf) return;
+
+      setIsGeneratingPLPdf(true);
+      // Let the modal render fully
+      await new Promise(resolve => setTimeout(resolve, 350));
+
+      try {
+        const element = document.getElementById('pl-pdf-preview-content');
+        if (!element) throw new Error("P&L preview element not found");
+
+        // Wait for any images (logo) to finish loading
+        const images = Array.from(element.querySelectorAll('img'));
+        await Promise.all(images.map(img => {
+          const anyImg = img as HTMLImageElement;
+          if (anyImg.complete) return Promise.resolve(true);
+          return new Promise(resolve => {
+            anyImg.onload = () => resolve(true);
+            anyImg.onerror = () => resolve(true);
+            setTimeout(() => resolve(true), 2000);
+          });
+        }));
+
+        const periodLabel =
+          filterPeriod === 'month'
+            ? referenceDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+            : filterPeriod === 'quarter'
+              ? `Q${Math.floor(referenceDate.getMonth() / 3) + 1}_${referenceDate.getFullYear()}`
+              : filterPeriod === 'year'
+                ? referenceDate.getFullYear().toString()
+                : 'All_Time';
+
+        const safeLabel = String(periodLabel).replace(/[^a-z0-9]/gi, '_');
+        const opt = {
+          margin: [10, 10, 10, 10],
+          filename: `Profit_Loss_${safeLabel}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        await (window as any).html2pdf().set(opt).from(element).save();
+
+        if (isMounted) {
+          showToast("P&L PDF Downloaded", "success");
+          setPlExportRequested(false);
+          setTimeout(() => setShowPLPreview(false), 1000);
+        }
+      } catch (error) {
+        console.error("P&L PDF failed:", error);
+        if (isMounted) {
+          showToast("P&L PDF export failed", "error");
+          setPlExportRequested(false);
+        }
+      } finally {
+        if (isMounted) setIsGeneratingPLPdf(false);
+      }
+    };
+
+    if (showPLPreview && plExportRequested) generatePLPdf();
+
+    return () => { isMounted = false; };
+  }, [showPLPreview, plExportRequested, filterPeriod, referenceDate]);
+
+
 
   const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -2425,14 +2502,24 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                     </div>
                   </div>
                   
-                  {/* Preview Button Only */}
-                  <button
-                    onClick={() => setShowPLPreview(true)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition-colors"
-                  >
-                    <Eye className="w-4 h-4" />
-                    <span className="hidden sm:inline">Preview</span>
-                  </button>
+                  {/* Actions */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setPlExportRequested(false); setShowPLPreview(true); }}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm flex items-center gap-2 transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span className="hidden sm:inline">Preview</span>
+                    </button>
+
+                    <button
+                      onClick={handleExportPLPDF}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm flex items-center gap-2 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span className="hidden sm:inline">Export PDF</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Compact Summary - Left Aligned */}
@@ -2471,10 +2558,37 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                   <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
                     {/* Modal Header */}
                     <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800">
-                      <h3 className="text-xl font-bold text-slate-900 dark:text-white">Profit & Loss Statement Preview</h3>
-                      <button onClick={() => setShowPLPreview(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
-                        <X className="w-5 h-5" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {isGeneratingPLPdf ? (
+                          <Loader2 className="animate-spin text-blue-600" size={18} />
+                        ) : plExportRequested ? (
+                          <Download className="text-emerald-600" size={18} />
+                        ) : (
+                          <Eye className="text-blue-600" size={18} />
+                        )}
+                        <span className="font-bold text-sm uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                          {isGeneratingPLPdf ? 'Generating PDF...' : plExportRequested ? 'Exporting PDF...' : 'Previewing P&L'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {!isGeneratingPLPdf && !plExportRequested && (
+                          <button
+                            onClick={() => setPlExportRequested(true)}
+                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm flex items-center gap-2 transition-colors"
+                          >
+                            <Download className="w-4 h-4" />
+                            <span className="hidden sm:inline">Export PDF</span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => { setPlExportRequested(false); setShowPLPreview(false); }}
+                          className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* PDF Preview Content */}
