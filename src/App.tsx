@@ -2797,15 +2797,15 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                               <div className="grid grid-cols-3 gap-3 mt-3">
                                 <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800">
                                   <div className="text-xs font-bold text-slate-500 dark:text-slate-400">Income</div>
-                                  <div className="font-extrabold text-slate-900 dark:text-white">{settings.currencySymbol}{data.incomeTotal.toFixed(2)}</div>
+                                  <div className="font-extrabold text-slate-900 dark:text-white">{formatCurrency.format(data.incomeTotal)}</div>
                                 </div>
                                 <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800">
                                   <div className="text-xs font-bold text-slate-500 dark:text-slate-400">Expenses</div>
-                                  <div className="font-extrabold text-slate-900 dark:text-white">{settings.currencySymbol}{data.expenseTotal.toFixed(2)}</div>
+                                  <div className="font-extrabold text-slate-900 dark:text-white">{formatCurrency.format(data.expenseTotal)}</div>
                                 </div>
                                 <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800">
                                   <div className="text-xs font-bold text-slate-500 dark:text-slate-400">Net</div>
-                                  <div className={`font-extrabold ${data.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{settings.currencySymbol}{data.netProfit.toFixed(2)}</div>
+                                  <div className={`font-extrabold ${data.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency.format(data.netProfit)}</div>
                                 </div>
                               </div>
                             </div>
@@ -2852,9 +2852,9 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                   {(() => {
                     const ref = new Date(plPdfReport.referenceDate + 'T00:00:00');
                     const data = computePL(plPdfReport.period, ref);
-                    const money = (n: number) => `${settings.currencySymbol}${n.toFixed(2)}`;
+                    const money = (n: number) => formatCurrency.format(n);
                     return (
-                      <div id="pl-pdf-export-root" style={{ background: '#ffffff', color: '#0f172a', padding: '36px', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial' }}>
+                      <div id="pl-pdf-export-root" className="p-8 md:p-12 bg-white text-slate-900 min-h-[1000px]">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #e2e8f0', paddingBottom: '16px' }}>
                           <div>
                             <div style={{ fontSize: '22px', fontWeight: 800 }}>{settings.businessName}</div>
