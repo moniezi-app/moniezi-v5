@@ -1229,7 +1229,7 @@ export default function App() {
 
       setIsGeneratingPLPdf(true);
       // Let the modal render fully
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 350));
 
       try {
         const element = document.getElementById('pl-pdf-preview-content');
@@ -1261,7 +1261,7 @@ export default function App() {
           margin: [10, 10, 10, 10],
           filename: `Profit_Loss_${safeLabel}.pdf`,
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0 },
+          html2canvas: { scale: 2, useCORS: true, letterRendering: true },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
@@ -1754,7 +1754,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                   <div className="flex items-center gap-3 text-emerald-600 dark:text-emerald-400"><Calculator size={20} /><span className="text-xs font-bold uppercase tracking-widest font-brand">Tax Snapshot</span></div>
                   <ArrowRight size={18} className="text-slate-300 dark:text-slate-400 -rotate-45 group-hover:rotate-0 group-hover:text-emerald-500 transition-all duration-300"/>
                </div>
-               <div className="grid grid-cols-2 gap-4 mb-3">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
                   <div><div className="text-xs text-slate-500 dark:text-slate-300 uppercase tracking-wider font-bold mb-1">Estimated Tax (YTD)</div><div className="text-2xl font-extrabold font-brand text-slate-900 dark:text-white">{formatCurrency.format(reportData.totalEstimatedTax)}</div></div>
                   <div><div className="text-xs text-slate-500 dark:text-slate-300 uppercase tracking-wider font-bold mb-1">YTD Net Profit</div><div className="text-2xl font-bold text-slate-600 dark:text-slate-200">{formatCurrency.format(reportData.ytdNetProfit)}</div></div>
                </div>
@@ -1765,7 +1765,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
             </div>
 
             <div className="bg-white dark:bg-slate-950 text-slate-900 dark:text-white p-6 rounded-xl shadow-md border border-slate-200 dark:border-slate-800">
-               <div className="grid grid-cols-2 gap-6">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {/* Profit Margin */}
                   <div className="flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/30 p-4 rounded-lg transition-colors" onClick={() => setCurrentPage(Page.Reports)}>
                      <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-3">
@@ -2258,7 +2258,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                                                 {advSection === 'income' ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
                                             </button>
                                             {advSection === 'income' && (
-                                                <div className="p-4 bg-white dark:bg-slate-950 grid grid-cols-2 gap-4 animate-in slide-in-from-top-2">
+                                                <div className="p-4 bg-white dark:bg-slate-950 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in slide-in-from-top-2">
                                                     <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">Interest</label><input type="number" value={plannerData.otherIncomeInterest || ''} onChange={e => setPlannerData(p => ({...p, otherIncomeInterest: Number(e.target.value)}))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2 py-1.5 text-sm outline-none" placeholder="0"/></div>
                                                     <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">Dividends</label><input type="number" value={plannerData.otherIncomeDividends || ''} onChange={e => setPlannerData(p => ({...p, otherIncomeDividends: Number(e.target.value)}))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2 py-1.5 text-sm outline-none" placeholder="0"/></div>
                                                     <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">Capital Gains</label><input type="number" value={plannerData.otherIncomeCapital || ''} onChange={e => setPlannerData(p => ({...p, otherIncomeCapital: Number(e.target.value)}))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2 py-1.5 text-sm outline-none" placeholder="0"/></div>
@@ -2390,7 +2390,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                                             </button>
                                             {advSection === 'payments' && (
                                                 <div className="p-4 bg-white dark:bg-slate-950 animate-in slide-in-from-top-2 space-y-4">
-                                                    <div className="grid grid-cols-2 gap-4">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                         <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">Est. Payments YTD</label><input type="number" value={plannerData.paymentsYTD || ''} onChange={e => setPlannerData(p => ({...p, paymentsYTD: Number(e.target.value)}))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2 py-1.5 text-sm outline-none" placeholder="0"/></div>
                                                         <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">Withholding YTD</label><input type="number" value={plannerData.withholdingYTD || ''} onChange={e => setPlannerData(p => ({...p, withholdingYTD: Number(e.target.value)}))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2 py-1.5 text-sm outline-none" placeholder="0"/></div>
                                                     </div>
@@ -2469,7 +2469,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                                         </div>
                                     </>
                                 ) : (
-                                    <div className="grid grid-cols-2 gap-4 mt-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
                                         <div className="bg-white dark:bg-slate-800 p-3 rounded border border-slate-200 dark:border-slate-700 text-center">
                                             <div className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Monthly Set-Aside</div>
                                             <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{formatCurrency.format(plannerResults.monthly)}</div>
@@ -2554,8 +2554,8 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
 
               {/* P&L Preview Modal */}
               {showPLPreview && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                  <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-stretch justify-stretch p-0">
+                  <div className="bg-white dark:bg-slate-900 rounded-none w-full h-full overflow-hidden flex flex-col">
                     {/* Modal Header */}
                     <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800">
                       <div className="flex items-center gap-2">
@@ -2592,8 +2592,8 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                     </div>
 
                     {/* PDF Preview Content */}
-                    <div className="flex-1 overflow-y-auto p-8 bg-slate-50 dark:bg-slate-950">
-                      <div id="pl-pdf-preview-content" className="max-w-3xl mx-auto bg-white dark:bg-slate-900 p-12 shadow-lg rounded-lg">
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50 dark:bg-slate-950">
+                      <div id="pl-pdf-preview-content" className="w-full max-w-none  bg-white dark:bg-slate-900 p-6 sm:p-10 shadow-lg rounded-none sm:rounded-lg">
                         {/* Header */}
                         <div className="text-center mb-8 pb-6 border-b-2 border-slate-300 dark:border-slate-700">
                           <Building size={32} className="mx-auto mb-3 text-blue-600" />
@@ -2625,9 +2625,9 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                                 return acc;
                               }, {} as Record<string, number>);
                               return Object.entries(incomeByCategory).map(([category, amount]) => (
-                                <div key={category} className="flex justify-between items-center py-2">
-                                  <span className="text-sm text-slate-700 dark:text-slate-300">{category}</span>
-                                  <span className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">{formatCurrency.format(amount)}</span>
+                                <div key={category} className="flex items-start justify-between gap-4 py-2">
+                                  <span className="text-sm text-slate-700 dark:text-slate-300 flex-1 min-w-0 break-words">{category}</span>
+                                  <span className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums shrink-0">{formatCurrency.format(amount)}</span>
                                 </div>
                               ));
                             })()}
@@ -2651,9 +2651,9 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                                 return acc;
                               }, {} as Record<string, number>);
                               return Object.entries(expensesByCategory).map(([category, amount]) => (
-                                <div key={category} className="flex justify-between items-center py-2">
-                                  <span className="text-sm text-slate-700 dark:text-slate-300">{category}</span>
-                                  <span className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">{formatCurrency.format(amount)}</span>
+                                <div key={category} className="flex items-start justify-between gap-4 py-2">
+                                  <span className="text-sm text-slate-700 dark:text-slate-300 flex-1 min-w-0 break-words">{category}</span>
+                                  <span className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums shrink-0">{formatCurrency.format(amount)}</span>
                                 </div>
                               ));
                             })()}
@@ -2683,7 +2683,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                         {/* Summary Statistics */}
                         <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
                           <h4 className="text-sm font-bold text-slate-600 dark:text-slate-400 uppercase mb-3">Transaction Summary</h4>
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded">
                               <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">Income Transactions</div>
                               <div className="text-xl font-bold text-slate-900 dark:text-white">
@@ -2869,7 +2869,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                     {settings.taxEstimationMethod === 'lastYear' && (
                        <div className="space-y-4 animate-in fade-in zoom-in-95">
                           <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">Enter values from last year's tax return to calculate your effective rate.</p>
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                              <div><label className="text-xs font-bold uppercase text-slate-500 dark:text-slate-300 mb-1 block">Net Profit (Last Year)</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-300 font-bold">$</span><input type="number" placeholder="0.00" value={lastYearCalc.profit} onChange={e => setLastYearCalc(p => ({...p, profit: e.target.value}))} className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"/></div></div>
                              <div><label className="text-xs font-bold uppercase text-slate-500 dark:text-slate-300 mb-1 block">Fed. Income Tax Paid</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-300 font-bold">$</span><input type="number" placeholder="0.00" value={lastYearCalc.tax} onChange={e => setLastYearCalc(p => ({...p, tax: e.target.value}))} className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"/></div></div>
                           </div>
@@ -2952,7 +2952,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
              <div className="space-y-6">
                 <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-lg border border-slate-100 dark:border-slate-800">
                     <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-4 uppercase tracking-wider">Log New Payment</h4>
-                    <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                         <DateInput label="Date" value={activeTaxPayment.date || ''} onChange={v => setActiveTaxPayment(p => ({...p, date: v}))} />
                         <div><label className="text-xs font-bold text-slate-500 dark:text-slate-300 mb-2 block pl-1 uppercase tracking-wider">Amount</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-300 font-bold">{settings.currencySymbol}</span><input type="number" value={activeTaxPayment.amount || ''} onChange={e => setActiveTaxPayment(p => ({...p, amount: Number(e.target.value)}))} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-0 rounded-lg pl-10 pr-4 py-4 font-bold text-lg outline-none focus:ring-2 focus:ring-blue-500/20" placeholder="0.00" /></div></div>
                     </div>
@@ -3000,7 +3000,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                               <input type="text" value={activeItem.clientAddress || ''} onChange={e => setActiveItem(prev => ({ ...prev, clientAddress: e.target.value }))} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" placeholder="Client Address (Optional)" />
                           </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4"><DateInput label="Date" value={activeItem.date || ''} onChange={v => setActiveItem(prev => ({ ...prev, date: v }))} /><DateInput label="Due Date" value={activeItem.due || ''} onChange={v => setActiveItem(prev => ({ ...prev, due: v }))} /></div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><DateInput label="Date" value={activeItem.date || ''} onChange={v => setActiveItem(prev => ({ ...prev, date: v }))} /><DateInput label="Due Date" value={activeItem.due || ''} onChange={v => setActiveItem(prev => ({ ...prev, due: v }))} /></div>
                       <div className="bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-100 dark:border-slate-800">
                           <div className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-800"><h4 className="text-xs font-bold text-slate-500 dark:text-slate-300 uppercase tracking-wider">Line Items</h4><button onClick={addInvoiceItem} className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"><PlusCircle size={14}/> Add Item</button></div>
                           <div className="p-2 space-y-2">{(activeItem.items || []).map((item, idx) => (<div key={item.id} className="flex gap-2 items-start animate-in fade-in slide-in-from-left-2"><div className="flex-1 space-y-2"><input type="text" value={item.description} onChange={(e) => updateInvoiceItem(item.id, 'description', e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" placeholder="Description" /><div className="flex gap-2"><div className="relative w-20"><span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-300 text-xs">Qty</span><input type="number" value={item.quantity || ''} onChange={(e) => updateInvoiceItem(item.id, 'quantity', Number(e.target.value))} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded pl-8 pr-2 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 text-center" placeholder="0"/></div><div className="relative flex-1"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-300 text-xs">$</span><input type="number" value={item.rate || ''} onChange={(e) => updateInvoiceItem(item.id, 'rate', Number(e.target.value))} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded pl-6 pr-2 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" placeholder="0.00" /></div></div></div><div className="pt-2"><button onClick={() => removeInvoiceItem(item.id)} className="text-slate-400 hover:text-red-500 p-1"><MinusCircle size={18} /></button></div></div>))}{(activeItem.items || []).length === 0 && <div className="text-center py-4 text-xs text-slate-400 italic">No items added. Add at least one item.</div>}</div>
@@ -3022,7 +3022,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                 ) : (
                    <div className="space-y-4">
                       <div><label className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2 block pl-1">Description</label><input type="text" value={activeItem.name || ''} onChange={e => setActiveItem(prev => ({ ...prev, name: e.target.value }))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-0 rounded-lg px-4 py-4 font-bold text-lg outline-none focus:ring-2 focus:ring-blue-500/20" placeholder={activeTab === 'income' ? "Client or Source" : "Vendor or Purchase"} /></div>
-                      <div className="grid grid-cols-2 gap-4"><DateInput label="Date" value={activeItem.date || ''} onChange={v => setActiveItem(prev => ({ ...prev, date: v }))} /><div><label className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2 block pl-1">Amount</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-300 font-bold">{settings.currencySymbol}</span><input type="number" value={activeItem.amount || ''} onChange={e => setActiveItem(prev => ({ ...prev, amount: Number(e.target.value) }))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-0 rounded-lg pl-10 pr-4 py-4 font-bold text-lg outline-none focus:ring-2 focus:ring-blue-500/20" placeholder="0.00" /></div></div></div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><DateInput label="Date" value={activeItem.date || ''} onChange={v => setActiveItem(prev => ({ ...prev, date: v }))} /><div><label className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2 block pl-1">Amount</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-300 font-bold">{settings.currencySymbol}</span><input type="number" value={activeItem.amount || ''} onChange={e => setActiveItem(prev => ({ ...prev, amount: Number(e.target.value) }))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-0 rounded-lg pl-10 pr-4 py-4 font-bold text-lg outline-none focus:ring-2 focus:ring-blue-500/20" placeholder="0.00" /></div></div></div>
                       <div><label className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2 block pl-1">Category</label>{renderCategoryChips(activeItem.category, (cat) => setActiveItem(prev => ({ ...prev, category: cat })))}</div>
                       <button onClick={() => saveTransaction(activeItem)} className={`w-full py-4 font-bold rounded-lg shadow-lg uppercase tracking-widest transition-all active:scale-95 text-white ${activeTab === 'income' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' : 'bg-red-600 hover:bg-red-700 shadow-red-500/20'}`}>Save {activeTab}</button>
                    </div>
