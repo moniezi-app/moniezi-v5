@@ -1295,100 +1295,99 @@ const defaultMethod: TaxEstimationMethod = parsed.settings?.taxEstimationMethod 
     showToast("Profit & Loss report deleted", "success");
   };
 
-
-
-// Save PDF in a user-chosen location when supported (desktop Chrome/Edge),
-// or open native Share/Save sheet on mobile. Falls back to browser download.
-const savePdfBlob = async (blob: Blob, filename: string) => {
-  const w: any = window as any;
-  const nav: any = navigator as any;
-
-  // 1) Desktop/Android Chrome/Edge: native "Save As…" picker (File System Access API)
-  if (typeof w.showSaveFilePicker === "function") {
-    const handle = await w.showSaveFilePicker({
-      suggestedName: filename,
-      types: [
-        {
-          description: "PDF document",
-          accept: { "application/pdf": [".pdf"] }
-        }
-      ]
-    });
-    const writable = await handle.createWritable();
-    await writable.write(blob);
-    await writable.close();
-    return;
-  }
-
-  // 2) Mobile: native share sheet (Save to Files / Drive / etc.)
-  if (nav?.share) {
-    try {
-      const file = new File([blob], filename, { type: "application/pdf" });
-      if (!nav.canShare || nav.canShare({ files: [file] })) {
-        await nav.share({ files: [file], title: filename });
-        return;
-      }
-    } catch {
-      // fall through to download
-    }
-  }
-
-  // 3) Fallback: browser download to default Downloads
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-};
+  
   const exportPLReportPDF = async (r: ProfitLossReport) => {
+    const safeName = (r.name || 'Profit_Loss')
+      .replace(/[^a-z0-9\-_]+/gi, '_')
+      .slice(0, 60) || 'Profit_Loss';
+    const filename = `${safeName}.pdf`;
+
+    const savePdfBlob = async (blob: Blob, fileName: string) => {
+      // 1) Desktop Chrome/Edge + some Android: Save As... (choose location)
+      try {
+        // @ts-ignore
+        if ((window as any).showSaveFilePicker) {
+          // @ts-ignore
+          const handle = await (window as any).showSaveFilePicker({
+            suggestedName: fileName,
+            types: [
+              {
+                description: 'PDF Document',
+                accept: { 'application/pdf': ['.pdf'] }
+              }
+            ]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          return;
+        }
+      } catch (err) {
+        // User cancelled or picker failed — fall through to share/download.
+      }
+
+      // 2) Mobile-friendly: Share sheet (Save to Files, Drive, Email, etc.)
+      try {
+        const file = new File([blob], fileName, { type: 'application/pdf' });
+        // @ts-ignore
+        if (navigator.share && ((navigator as any).canShare?.({ files: [file] }) ?? true)) {
+          // @ts-ignore
+          await navigator.share({ files: [file], title: fileName });
+          return;
+        }
+      } catch (err) {
+        // fall through
+      }
+
+      // 3) Fallback: normal browser download to default downloads folder
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    };
+
     try {
       setIsExportingPlPdf(true);
       setPlPdfReport(r);
+
       // let the DOM render
-      await new Promise(res => setTimeout(res, 100));
+      await new Promise(res => setTimeout(res, 120));
+
       // wait for fonts if available
       // @ts-ignore
-      if (document?.fonts?.ready) { try { /* @ts-ignore */ await document.fonts.ready; } catch {} }
+      if (document?.fonts?.ready) {
+        try { /* @ts-ignore */ await document.fonts.ready; } catch {}
+      }
+
       const el = document.getElementById('pl-pdf-export-root');
       if (!el) throw new Error('Missing P&L export root');
-      const safeName = (r.name || 'Profit_Loss').replace(/[^a-z0-9\-_]+/gi, '_').slice(0, 60);
+
       const opt = {
         margin: [10, 10, 10, 10],
-        filename: `${safeName}.pdf`,
+        filename,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0, scrollX: 0 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          scrollY: 0,
+          scrollX: 0
+        },
         pagebreak: { mode: ['css', 'legacy'] },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
-const worker = (window as any).html2pdf().set(opt).from(el);
 
-// Try to get a Blob so we can offer "Save As…" / Share on supported devices.
-let pdfBlob: Blob | null = null;
-try {
-  if (typeof worker.outputPdf === "function") {
-    pdfBlob = await worker.outputPdf('blob');
-  } else if (typeof worker.output === "function") {
-    // Some builds expose output() instead
-    pdfBlob = await worker.output('blob');
-  } else if (typeof worker.toPdf === "function") {
-    await worker.toPdf();
-    const pdf = await worker.get('pdf');
-    pdfBlob = pdf.output('blob');
-  }
-} catch {
-  pdfBlob = null;
-}
+      // Build PDF as a Blob so we can offer Save-As / Share
+      const worker = (window as any).html2pdf().set(opt).from(el).toPdf();
+      const pdf = await worker.get('pdf');
+      const blob: Blob = pdf.output('blob');
 
-if (pdfBlob) {
-  await savePdfBlob(pdfBlob, `${safeName}.pdf`);
-} else {
-  // Last-resort fallback to normal browser download
-  await worker.save();
-}
-      showToast("P&L PDF downloaded", "success");
+      await savePdfBlob(blob, filename);
+      showToast("P&L PDF saved", "success");
     } catch (e) {
       console.error(e);
       showToast("P&L PDF export failed", "error");
@@ -2919,75 +2918,139 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
               )}
 
               {/* Offscreen export root (print-grade, like invoices) */}
-              {plPdfReport && (
+              
+{plPdfReport && (
                 <div style={{ position: 'fixed', left: '-10000px', top: 0, width: '794px', background: '#ffffff' }}>
                   {(() => {
                     const ref = new Date(plPdfReport.referenceDate + 'T00:00:00');
                     const data = computePL(plPdfReport.period, ref);
                     const money = (n: number) => formatCurrency.format(n);
+
                     return (
-                      <div id="pl-pdf-export-root" className="p-8 md:p-12 bg-white text-slate-900 min-h-[1000px]">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #e2e8f0', paddingBottom: '16px' }}>
-                          <div>
-                            <div style={{ fontSize: '22px', fontWeight: 800 }}>{settings.businessName}</div>
-                            {settings.businessAddress ? <div style={{ marginTop: '6px', fontSize: '12px', color: '#475569' }}>{settings.businessAddress}</div> : null}
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '18px', fontWeight: 900 }}>PROFIT &amp; LOSS</div>
-                            <div style={{ marginTop: '6px', fontSize: '12px', color: '#475569', fontWeight: 700 }}>{data.label}</div>
-                            <div style={{ marginTop: '6px', fontSize: '12px', color: '#64748b' }}>{plPdfReport.name}</div>
-                          </div>
-                        </div>
-
-                        <div style={{ marginTop: '18px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                          <div style={{ border: '1px solid #e2e8f0', borderRadius: '14px', padding: '14px' }}>
-                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, letterSpacing: '0.08em' }}>TOTAL INCOME</div>
-                            <div style={{ marginTop: '6px', fontSize: '18px', fontWeight: 900 }}>{money(data.incomeTotal)}</div>
-                          </div>
-                          <div style={{ border: '1px solid #e2e8f0', borderRadius: '14px', padding: '14px' }}>
-                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, letterSpacing: '0.08em' }}>TOTAL EXPENSES</div>
-                            <div style={{ marginTop: '6px', fontSize: '18px', fontWeight: 900 }}>{money(data.expenseTotal)}</div>
-                          </div>
-                          <div style={{ border: '1px solid #e2e8f0', borderRadius: '14px', padding: '14px' }}>
-                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, letterSpacing: '0.08em' }}>NET PROFIT</div>
-                            <div style={{ marginTop: '6px', fontSize: '18px', fontWeight: 900, color: data.netProfit >= 0 ? '#059669' : '#dc2626' }}>{money(data.netProfit)}</div>
-                          </div>
-                        </div>
-
-                        <div style={{ marginTop: '22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                          <div>
-                            <div style={{ fontSize: '12px', fontWeight: 900, letterSpacing: '0.06em', color: '#334155' }}>INCOME BY CATEGORY</div>
-                            <div style={{ marginTop: '10px', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '10px 12px', fontSize: '11px', fontWeight: 900, color: '#475569' }}>
-                                <div>CATEGORY</div><div style={{ textAlign: 'right' }}>AMOUNT</div>
+                      <div id="pl-pdf-export-root" className="p-8 md:p-12 bg-white min-h-[1000px] text-slate-900">
+                        {/* Header (match invoice feel) */}
+                        <div className="flex items-start justify-between border-b border-slate-100 pb-8 mb-8 gap-6 z-10 relative">
+                          <div className="flex-1">
+                            <div className={`flex ${settings.showLogoOnInvoice && settings.businessLogo ? 'items-start gap-4' : ''}`}>
+                              {settings.showLogoOnInvoice && settings.businessLogo ? (
+                                <img src={settings.businessLogo} alt="Logo" className={`h-16 w-16 object-contain ${settings.logoAlignment === 'center' ? 'mx-auto' : ''}`} />
+                              ) : null}
+                              <div className="flex-1">
+                                <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 mb-2 font-brand">
+                                  {settings.businessName}
+                                </h1>
+                                {settings.businessAddress ? (
+                                  <div className="text-sm text-slate-500 whitespace-pre-line">
+                                    {settings.businessAddress}
+                                  </div>
+                                ) : null}
                               </div>
-                              {(data.incomeByCategory.length ? data.incomeByCategory : [{ category: '—', amount: 0 }]).map((row, idx) => (
-                                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', padding: '10px 12px', fontSize: '12px', borderBottom: idx === (data.incomeByCategory.length - 1) ? 'none' : '1px solid #f1f5f9' }}>
-                                  <div style={{ color: '#0f172a', fontWeight: 700 }}>{row.category}</div>
-                                  <div style={{ textAlign: 'right', color: '#0f172a', fontWeight: 800 }}>{money(row.amount)}</div>
-                                </div>
-                              ))}
                             </div>
                           </div>
 
-                          <div>
-                            <div style={{ fontSize: '12px', fontWeight: 900, letterSpacing: '0.06em', color: '#334155' }}>EXPENSES BY CATEGORY</div>
-                            <div style={{ marginTop: '10px', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '10px 12px', fontSize: '11px', fontWeight: 900, color: '#475569' }}>
-                                <div>CATEGORY</div><div style={{ textAlign: 'right' }}>AMOUNT</div>
-                              </div>
-                              {(data.expenseByCategory.length ? data.expenseByCategory : [{ category: '—', amount: 0 }]).map((row, idx) => (
-                                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', padding: '10px 12px', fontSize: '12px', borderBottom: idx === (data.expenseByCategory.length - 1) ? 'none' : '1px solid #f1f5f9' }}>
-                                  <div style={{ color: '#0f172a', fontWeight: 700 }}>{row.category}</div>
-                                  <div style={{ textAlign: 'right', color: '#0f172a', fontWeight: 800 }}>{money(row.amount)}</div>
-                                </div>
-                              ))}
+                          <div className="text-right">
+                            <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Report</div>
+                            <div className="text-2xl font-black tracking-tight text-slate-900 uppercase">Profit &amp; Loss</div>
+                            <div className="mt-2 text-sm font-semibold text-slate-600">{data.label}</div>
+                            <div className="mt-1 text-xs text-slate-500">{plPdfReport.name}</div>
+                          </div>
+                        </div>
+
+                        {/* Summary */}
+                        <div className="grid grid-cols-3 gap-4 mb-8">
+                          <div className="rounded-3xl border border-slate-100 p-5">
+                            <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Total income</div>
+                            <div className="mt-2 text-2xl font-extrabold text-slate-900">{money(data.incomeTotal)}</div>
+                          </div>
+                          <div className="rounded-3xl border border-slate-100 p-5">
+                            <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Total expenses</div>
+                            <div className="mt-2 text-2xl font-extrabold text-slate-900">{money(data.expenseTotal)}</div>
+                          </div>
+                          <div className="rounded-3xl border border-slate-100 p-5">
+                            <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Net profit</div>
+                            <div className={`mt-2 text-2xl font-extrabold ${data.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {money(data.netProfit)}
                             </div>
                           </div>
                         </div>
 
-                        <div style={{ marginTop: '18px', fontSize: '10px', color: '#64748b' }}>
-                          Generated by Moniezi Pro • {new Date().toLocaleString('en-US')}
+                        {/* Tables */}
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="rounded-3xl border border-slate-100 overflow-hidden">
+                            <div className="px-6 py-4 border-b border-slate-100">
+                              <div className="text-sm font-extrabold text-slate-900">Income</div>
+                              <div className="text-xs text-slate-500 mt-1">By category</div>
+                            </div>
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-slate-500">
+                                  <th className="text-left px-6 py-3 font-semibold">Category</th>
+                                  <th className="text-right px-6 py-3 font-semibold">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {data.incomeByCat.length === 0 ? (
+                                  <tr>
+                                    <td className="px-6 py-4 text-slate-500" colSpan={2}>No income entries</td>
+                                  </tr>
+                                ) : (
+                                  data.incomeByCat.map((row, i) => (
+                                    <tr key={i} className="border-t border-slate-100">
+                                      <td className="px-6 py-3 text-slate-900">{row.cat}</td>
+                                      <td className="px-6 py-3 text-right font-semibold text-slate-900">{money(row.amount)}</td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                              <tfoot>
+                                <tr className="border-t border-slate-100">
+                                  <td className="px-6 py-4 font-extrabold text-slate-900">Total</td>
+                                  <td className="px-6 py-4 text-right font-extrabold text-slate-900">{money(data.incomeTotal)}</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+
+                          <div className="rounded-3xl border border-slate-100 overflow-hidden">
+                            <div className="px-6 py-4 border-b border-slate-100">
+                              <div className="text-sm font-extrabold text-slate-900">Expenses</div>
+                              <div className="text-xs text-slate-500 mt-1">By category</div>
+                            </div>
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-slate-500">
+                                  <th className="text-left px-6 py-3 font-semibold">Category</th>
+                                  <th className="text-right px-6 py-3 font-semibold">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {data.expenseByCat.length === 0 ? (
+                                  <tr>
+                                    <td className="px-6 py-4 text-slate-500" colSpan={2}>No expense entries</td>
+                                  </tr>
+                                ) : (
+                                  data.expenseByCat.map((row, i) => (
+                                    <tr key={i} className="border-t border-slate-100">
+                                      <td className="px-6 py-3 text-slate-900">{row.cat}</td>
+                                      <td className="px-6 py-3 text-right font-semibold text-slate-900">{money(row.amount)}</td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                              <tfoot>
+                                <tr className="border-t border-slate-100">
+                                  <td className="px-6 py-4 font-extrabold text-slate-900">Total</td>
+                                  <td className="px-6 py-4 text-right font-extrabold text-slate-900">{money(data.expenseTotal)}</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="mt-10 pt-6 border-t border-slate-100 text-xs text-slate-500 flex justify-between">
+                          <div>Generated by {settings.businessName}</div>
+                          <div>{new Date().toLocaleString('en-US')}</div>
                         </div>
                       </div>
                     );
@@ -2995,7 +3058,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                 </div>
               )}
 
-              {/* P&L Preview Modal */}
+                            {/* P&L Preview Modal */}
               {showPLPreview && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                   <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
