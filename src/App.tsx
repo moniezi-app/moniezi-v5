@@ -75,7 +75,7 @@ import {
   ToggleLeft,
   ToggleRight
 } from 'lucide-react';
-import { Page, Transaction, Invoice, UserSettings, Notification, FilterPeriod, RecurrenceFrequency, FilingStatus, TaxPayment, TaxEstimationMethod, InvoiceItem, CustomCategories, Receipt as ReceiptType , ProfitLossReport } from './types';
+import { Page, Transaction, Invoice, UserSettings, Notification, FilterPeriod, RecurrenceFrequency, FilingStatus, TaxPayment, TaxEstimationMethod, InvoiceItem, CustomCategories, Receipt as ReceiptType } from './types';
 import { CATS_IN, CATS_OUT, CATS_BILLING, DEFAULT_PAY_PREFS, DB_KEY, TAX_CONSTANTS, TAX_PLANNER_2026, getFreshDemoData } from './constants';
 import InsightsDashboard from './InsightsDashboard';
 import { getInsightCount } from './services/insightsEngine';
@@ -488,13 +488,7 @@ export default function App() {
   }, [currentPage]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  
-  const [plReports, setPlReports] = useState<ProfitLossReport[]>([]);
-  const [plReportDraft, setPlReportDraft] = useState<ProfitLossReport | null>(null);
-  const [isPlReportModalOpen, setIsPlReportModalOpen] = useState(false);
-  const [plPdfReport, setPlPdfReport] = useState<ProfitLossReport | null>(null);
-  const [isExportingPlPdf, setIsExportingPlPdf] = useState(false);
-const [settings, setSettings] = useState<UserSettings>({
+  const [settings, setSettings] = useState<UserSettings>({
     businessName: "My Business",
     ownerName: "Owner",
     payPrefs: DEFAULT_PAY_PREFS,
@@ -734,9 +728,7 @@ const [settings, setSettings] = useState<UserSettings>({
         const parsed = JSON.parse(saved);
         setTransactions(parsed.transactions || []);
         setInvoices(parsed.invoices || []);
-        
-        setPlReports(parsed.plReports || []);
-const defaultMethod: TaxEstimationMethod = parsed.settings?.taxEstimationMethod || 'custom'; 
+        const defaultMethod: TaxEstimationMethod = parsed.settings?.taxEstimationMethod || 'custom'; 
         setSettings({
             businessName: "My Business",
             ownerName: "Owner",
@@ -770,7 +762,7 @@ const defaultMethod: TaxEstimationMethod = parsed.settings?.taxEstimationMethod 
 
   useEffect(() => {
     if (dataLoaded) {
-      localStorage.setItem(DB_KEY, JSON.stringify({ transactions, invoices, plReports, settings, taxPayments, customCategories, receipts }));
+      localStorage.setItem(DB_KEY, JSON.stringify({ transactions, invoices, settings, taxPayments, customCategories, receipts }));
     }
   }, [transactions, invoices, settings, taxPayments, customCategories, receipts, dataLoaded]);
 
@@ -1198,135 +1190,7 @@ const defaultMethod: TaxEstimationMethod = parsed.settings?.taxEstimationMethod 
      setInvoices(prev => prev.map(i => i.id === updatedInvoice.id ? updatedInvoice : i));
      setSelectedInvoiceForDoc(updatedInvoice); setIsPdfPreviewOpen(true);
   };
-    // --- Profit & Loss Reports (saved like invoices) ---
-  const formatPLPeriodLabel = (p: FilterPeriod, ref: Date) => {
-    if (p === 'all') return 'All Time';
-    if (p === 'daily') return ref.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-    if (p === 'weekly') {
-      const start = getStartOfWeek(ref);
-      const end = getEndOfWeek(ref);
-      const s = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const e = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      return `Week ${s} – ${e}`;
-    }
-    if (p === 'monthly') return ref.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    return ref.getFullYear().toString();
-  };
-
-  const getTransactionsForPeriod = (p: FilterPeriod, ref: Date) => {
-    if (p === 'all') return transactions;
-    return transactions.filter(t => {
-      const tDate = new Date(t.date);
-      const checkDate = new Date(tDate.getFullYear(), tDate.getMonth(), tDate.getDate());
-      const refDay = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
-      if (p === 'daily') return checkDate.getTime() === refDay.getTime();
-      if (p === 'weekly') {
-        const start = getStartOfWeek(refDay);
-        const end = getEndOfWeek(refDay);
-        return checkDate >= start && checkDate <= end;
-      }
-      if (p === 'monthly') return tDate.getMonth() === refDay.getMonth() && tDate.getFullYear() === refDay.getFullYear();
-      return tDate.getFullYear() === refDay.getFullYear();
-    });
-  };
-
-  const computePL = (p: FilterPeriod, ref: Date) => {
-    const tx = getTransactionsForPeriod(p, ref);
-    const incomeTx = tx.filter(t => t.type === 'income');
-    const expenseTx = tx.filter(t => t.type === 'expense');
-    const incomeTotal = incomeTx.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-    const expenseTotal = expenseTx.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-    const netProfit = incomeTotal - expenseTotal;
-
-    const group = (arr: Transaction[]) => {
-      const m = new Map<string, number>();
-      for (const t of arr) m.set(t.category || 'Uncategorized', (m.get(t.category || 'Uncategorized') || 0) + (Number(t.amount) || 0));
-      return Array.from(m.entries()).map(([category, amount]) => ({ category, amount }))
-        .sort((a, b) => b.amount - a.amount);
-    };
-
-    return {
-      label: formatPLPeriodLabel(p, ref),
-      incomeTotal,
-      expenseTotal,
-      netProfit,
-      incomeByCategory: group(incomeTx),
-      expenseByCategory: group(expenseTx),
-      incomeTx,
-      expenseTx
-    };
-  };
-
-  const openCreatePLReport = () => {
-    const ref = referenceDate || new Date();
-    const refISO = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate()).toISOString().slice(0, 10);
-    const label = formatPLPeriodLabel(filterPeriod, ref);
-    const nowISO = new Date().toISOString();
-    setPlReportDraft({
-      id: generateId('pl'),
-      name: `Profit & Loss — ${label}`,
-      period: filterPeriod,
-      referenceDate: refISO,
-      createdAt: nowISO,
-      updatedAt: nowISO
-    });
-    setIsPlReportModalOpen(true);
-  };
-
-  const openEditPLReport = (r: ProfitLossReport) => {
-    setPlReportDraft({ ...r, updatedAt: new Date().toISOString() });
-    setIsPlReportModalOpen(true);
-  };
-
-  const savePLReport = () => {
-    if (!plReportDraft) return;
-    setPlReports(prev => {
-      const exists = prev.some(r => r.id === plReportDraft.id);
-      const updated = { ...plReportDraft, updatedAt: new Date().toISOString() };
-      return exists ? prev.map(r => r.id === updated.id ? updated : r) : [updated, ...prev];
-    });
-    showToast("Profit & Loss report saved", "success");
-    setIsPlReportModalOpen(false);
-    setPlReportDraft(null);
-  };
-
-  const deletePLReport = (id: string) => {
-    setPlReports(prev => prev.filter(r => r.id !== id));
-    showToast("Profit & Loss report deleted", "success");
-  };
-
-  const exportPLReportPDF = async (r: ProfitLossReport) => {
-    try {
-      setIsExportingPlPdf(true);
-      setPlPdfReport(r);
-      // let the DOM render
-      await new Promise(res => setTimeout(res, 100));
-      // wait for fonts if available
-      // @ts-ignore
-      if (document?.fonts?.ready) { try { /* @ts-ignore */ await document.fonts.ready; } catch {} }
-      const el = document.getElementById('pl-pdf-export-root');
-      if (!el) throw new Error('Missing P&L export root');
-      const safeName = (r.name || 'Profit_Loss').replace(/[^a-z0-9\-_]+/gi, '_').slice(0, 60);
-      const opt = {
-        margin: [10, 10, 10, 10],
-        filename: `${safeName}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0, scrollX: 0 },
-        pagebreak: { mode: ['css', 'legacy'] },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
-      await (window as any).html2pdf().set(opt).from(el).save();
-      showToast("P&L PDF exported — check Downloads (Ctrl+J) or the new PDF tab", "success");
-    } catch (e) {
-      console.error(e);
-      showToast("P&L PDF export failed", "error");
-    } finally {
-      setIsExportingPlPdf(false);
-      setPlPdfReport(null);
-    }
-  };
-
-const handleExportPLPDF = () => {
+  const handleExportPLPDF = () => {
     setPlExportRequested(true);
     setShowPLPreview(true);
   };
@@ -1349,27 +1213,7 @@ const handleExportPLPDF = () => {
                  return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; setTimeout(resolve, 2000); });
              }));
              const opt = { margin: [10, 10, 10, 10], filename: `Invoice_${selectedInvoiceForDoc.client.replace(/[^a-z0-9]/gi, '_')}_${selectedInvoiceForDoc.date}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
-             // Generate PDF as a Blob so we can both download it AND open it (easy to find on all devices)
-const worker = (window as any).html2pdf().set(opt).from(element).toPdf();
-const pdf = await worker.get('pdf');
-const blob: Blob = pdf.output('blob');
-
-// 1) Trigger a normal browser download (like Invoices)
-const blobUrl = URL.createObjectURL(blob);
-const a = document.createElement('a');
-a.href = blobUrl;
-a.download = opt.filename || 'Profit_Loss_Report.pdf';
-document.body.appendChild(a);
-a.click();
-a.remove();
-
-// 2) Also try to open the PDF in a new tab (mobile users can then "Save to Files"/Share)
-// If popups are blocked, the download still works.
-try { window.open(blobUrl, '_blank'); } catch {}
-
-// Cleanup later (give the browser time to start the download/open)
-setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-
+             await (window as any).html2pdf().set(opt).from(element).save();
              if (isMounted) { showToast("PDF Downloaded", "success"); setTimeout(() => setIsPdfPreviewOpen(false), 1000); }
          } catch (error) { console.error("PDF failed:", error); if (isMounted) showToast("Export failed", "error"); } finally { if (isMounted) setIsGeneratingPdf(false); }
      };
@@ -1385,7 +1229,7 @@ setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
 
       setIsGeneratingPLPdf(true);
       // Let the modal render fully
-      await new Promise(resolve => setTimeout(resolve, 350));
+      await new Promise(resolve => setTimeout(resolve, 800));
 
       try {
         const element = document.getElementById('pl-pdf-preview-content');
@@ -1417,31 +1261,11 @@ setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
           margin: [10, 10, 10, 10],
           filename: `Profit_Loss_${safeLabel}.pdf`,
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0 },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
-        // Generate PDF as a Blob so we can both download it AND open it (easy to find on all devices)
-const worker = (window as any).html2pdf().set(opt).from(element).toPdf();
-const pdf = await worker.get('pdf');
-const blob: Blob = pdf.output('blob');
-
-// 1) Trigger a normal browser download (like Invoices)
-const blobUrl = URL.createObjectURL(blob);
-const a = document.createElement('a');
-a.href = blobUrl;
-a.download = opt.filename || 'Profit_Loss_Report.pdf';
-document.body.appendChild(a);
-a.click();
-a.remove();
-
-// 2) Also try to open the PDF in a new tab (mobile users can then "Save to Files"/Share)
-// If popups are blocked, the download still works.
-try { window.open(blobUrl, '_blank'); } catch {}
-
-// Cleanup later (give the browser time to start the download/open)
-setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-
+        await (window as any).html2pdf().set(opt).from(element).save();
 
         if (isMounted) {
           showToast("P&L PDF Downloaded", "success");
@@ -2681,11 +2505,19 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                   {/* Actions */}
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={openCreatePLReport}
+                      onClick={() => { setPlExportRequested(false); setShowPLPreview(true); }}
                       className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm flex items-center gap-2 transition-colors"
                     >
-                      <Plus className="w-4 h-4" />
-                      <span className="hidden sm:inline">New Report</span>
+                      <Eye className="w-4 h-4" />
+                      <span className="hidden sm:inline">Preview</span>
+                    </button>
+
+                    <button
+                      onClick={handleExportPLPDF}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm flex items-center gap-2 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span className="hidden sm:inline">Export PDF</span>
                     </button>
                   </div>
                 </div>
@@ -2719,249 +2551,6 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                   </div>
                 </div>
               </div>
-
-              {/* Saved P&L Reports (like invoices) */}
-              <div className="mt-6">
-                {plReports.length === 0 ? (
-                  <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-5 text-slate-700 dark:text-slate-200">
-                    <div className="font-bold">No saved Profit &amp; Loss reports yet</div>
-                    <div className="text-sm opacity-80 mt-1">Tap <span className="font-semibold">New Report</span> to generate a saved P&amp;L card (then you can Edit, Delete, or Export PDF — just like invoices).</div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {plReports.map(r => {
-                      const ref = new Date(r.referenceDate + 'T00:00:00');
-                      const label = formatPLPeriodLabel(r.period, ref);
-                      return (
-                        <div key={r.id} className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="font-extrabold text-slate-900 dark:text-white truncate">{r.name}</div>
-                              <div className="text-xs mt-1 font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</div>
-                            </div>
-                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                title="Export PDF"
-                                onClick={(e) => { e.stopPropagation(); exportPLReportPDF(r); }}
-                                className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
-                              >
-                                <Download className="w-4 h-4" />
-                              </button>
-                              <button
-                                title="Edit"
-                                onClick={(e) => { e.stopPropagation(); openEditPLReport(r); }}
-                                className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
-                              >
-                                <Edit3 className="w-4 h-4" />
-                              </button>
-                              <button
-                                title="Delete"
-                                onClick={(e) => { e.stopPropagation(); deletePLReport(r.id); }}
-                                className="p-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-950/60"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                            <span>Created</span>
-                            <span className="font-semibold">{new Date(r.createdAt).toLocaleDateString('en-US')}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Create/Edit P&L Report Modal */}
-              {isPlReportModalOpen && plReportDraft && (
-                <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden">
-                    <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                      <div className="font-extrabold text-slate-900 dark:text-white">
-                        {plReports.some(r => r.id === plReportDraft.id) ? 'Edit Profit & Loss Report' : 'New Profit & Loss Report'}
-                      </div>
-                      <button onClick={() => { setIsPlReportModalOpen(false); setPlReportDraft(null); }} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <div className="p-5 space-y-4">
-                      <div>
-                        <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Report Name</div>
-                        <input
-                          value={plReportDraft.name}
-                          onChange={(e) => setPlReportDraft(d => d ? ({ ...d, name: e.target.value }) : d)}
-                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 py-3 text-slate-900 dark:text-white"
-                          placeholder="Profit & Loss — January 2026"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Period</div>
-                          <select
-                            value={plReportDraft.period}
-                            onChange={(e) => setPlReportDraft(d => d ? ({ ...d, period: e.target.value as FilterPeriod }) : d)}
-                            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 py-3 text-slate-900 dark:text-white"
-                          >
-                            <option value="all">All Time</option>
-                            <option value="daily">Daily</option>
-                            <option value="weekly">Weekly</option>
-                            <option value="monthly">Monthly</option>
-                            <option value="yearly">Yearly</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Reference Date</div>
-                          <input
-                            type="date"
-                            value={plReportDraft.referenceDate}
-                            onChange={(e) => setPlReportDraft(d => d ? ({ ...d, referenceDate: e.target.value }) : d)}
-                            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 py-3 text-slate-900 dark:text-white"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4">
-                        {(() => {
-                          const ref = new Date(plReportDraft.referenceDate + 'T00:00:00');
-                          const data = computePL(plReportDraft.period, ref);
-                          return (
-                            <div className="space-y-2">
-                              <div className="font-extrabold text-slate-900 dark:text-white">Preview Totals</div>
-                              <div className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">{data.label}</div>
-                              <div className="grid grid-cols-3 gap-3 mt-3">
-                                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800">
-                                  <div className="text-xs font-bold text-slate-500 dark:text-slate-400">Income</div>
-                                  <div className="font-extrabold text-slate-900 dark:text-white">{formatCurrency.format(data.incomeTotal)}</div>
-                                </div>
-                                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800">
-                                  <div className="text-xs font-bold text-slate-500 dark:text-slate-400">Expenses</div>
-                                  <div className="font-extrabold text-slate-900 dark:text-white">{formatCurrency.format(data.expenseTotal)}</div>
-                                </div>
-                                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800">
-                                  <div className="text-xs font-bold text-slate-500 dark:text-slate-400">Net</div>
-                                  <div className={`font-extrabold ${data.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency.format(data.netProfit)}</div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-
-                    <div className="p-5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        {plReports.some(r => r.id === plReportDraft.id) && (
-                          <button
-                            onClick={() => exportPLReportPDF(plReportDraft)}
-                            className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold flex items-center gap-2"
-                            disabled={isExportingPlPdf}
-                          >
-                            <Download className="w-4 h-4" />
-                            Export PDF
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => { setIsPlReportModalOpen(false); setPlReportDraft(null); }}
-                          className="px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-extrabold"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={savePLReport}
-                          className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold"
-                        >
-                          Save Report
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Offscreen export root (print-grade, like invoices) */}
-              {plPdfReport && (
-                <div style={{ position: 'fixed', left: '-10000px', top: 0, width: '794px', background: '#ffffff' }}>
-                  {(() => {
-                    const ref = new Date(plPdfReport.referenceDate + 'T00:00:00');
-                    const data = computePL(plPdfReport.period, ref);
-                    const money = (n: number) => formatCurrency.format(n);
-                    return (
-                      <div id="pl-pdf-export-root" className="p-8 md:p-12 bg-white text-slate-900 min-h-[1000px]">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #e2e8f0', paddingBottom: '16px' }}>
-                          <div>
-                            <div style={{ fontSize: '22px', fontWeight: 800 }}>{settings.businessName}</div>
-                            {settings.businessAddress ? <div style={{ marginTop: '6px', fontSize: '12px', color: '#475569' }}>{settings.businessAddress}</div> : null}
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '18px', fontWeight: 900 }}>PROFIT &amp; LOSS</div>
-                            <div style={{ marginTop: '6px', fontSize: '12px', color: '#475569', fontWeight: 700 }}>{data.label}</div>
-                            <div style={{ marginTop: '6px', fontSize: '12px', color: '#64748b' }}>{plPdfReport.name}</div>
-                          </div>
-                        </div>
-
-                        <div style={{ marginTop: '18px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                          <div style={{ border: '1px solid #e2e8f0', borderRadius: '14px', padding: '14px' }}>
-                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, letterSpacing: '0.08em' }}>TOTAL INCOME</div>
-                            <div style={{ marginTop: '6px', fontSize: '18px', fontWeight: 900 }}>{money(data.incomeTotal)}</div>
-                          </div>
-                          <div style={{ border: '1px solid #e2e8f0', borderRadius: '14px', padding: '14px' }}>
-                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, letterSpacing: '0.08em' }}>TOTAL EXPENSES</div>
-                            <div style={{ marginTop: '6px', fontSize: '18px', fontWeight: 900 }}>{money(data.expenseTotal)}</div>
-                          </div>
-                          <div style={{ border: '1px solid #e2e8f0', borderRadius: '14px', padding: '14px' }}>
-                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, letterSpacing: '0.08em' }}>NET PROFIT</div>
-                            <div style={{ marginTop: '6px', fontSize: '18px', fontWeight: 900, color: data.netProfit >= 0 ? '#059669' : '#dc2626' }}>{money(data.netProfit)}</div>
-                          </div>
-                        </div>
-
-                        <div style={{ marginTop: '22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                          <div>
-                            <div style={{ fontSize: '12px', fontWeight: 900, letterSpacing: '0.06em', color: '#334155' }}>INCOME BY CATEGORY</div>
-                            <div style={{ marginTop: '10px', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '10px 12px', fontSize: '11px', fontWeight: 900, color: '#475569' }}>
-                                <div>CATEGORY</div><div style={{ textAlign: 'right' }}>AMOUNT</div>
-                              </div>
-                              {(data.incomeByCategory.length ? data.incomeByCategory : [{ category: '—', amount: 0 }]).map((row, idx) => (
-                                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', padding: '10px 12px', fontSize: '12px', borderBottom: idx === (data.incomeByCategory.length - 1) ? 'none' : '1px solid #f1f5f9' }}>
-                                  <div style={{ color: '#0f172a', fontWeight: 700 }}>{row.category}</div>
-                                  <div style={{ textAlign: 'right', color: '#0f172a', fontWeight: 800 }}>{money(row.amount)}</div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <div style={{ fontSize: '12px', fontWeight: 900, letterSpacing: '0.06em', color: '#334155' }}>EXPENSES BY CATEGORY</div>
-                            <div style={{ marginTop: '10px', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '10px 12px', fontSize: '11px', fontWeight: 900, color: '#475569' }}>
-                                <div>CATEGORY</div><div style={{ textAlign: 'right' }}>AMOUNT</div>
-                              </div>
-                              {(data.expenseByCategory.length ? data.expenseByCategory : [{ category: '—', amount: 0 }]).map((row, idx) => (
-                                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', padding: '10px 12px', fontSize: '12px', borderBottom: idx === (data.expenseByCategory.length - 1) ? 'none' : '1px solid #f1f5f9' }}>
-                                  <div style={{ color: '#0f172a', fontWeight: 700 }}>{row.category}</div>
-                                  <div style={{ textAlign: 'right', color: '#0f172a', fontWeight: 800 }}>{money(row.amount)}</div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div style={{ marginTop: '18px', fontSize: '10px', color: '#64748b' }}>
-                          Generated by Moniezi Pro • {new Date().toLocaleString('en-US')}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
 
               {/* P&L Preview Modal */}
               {showPLPreview && (
@@ -3155,27 +2744,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                               jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
                             };
                             
-                            // Generate PDF as a Blob so we can both download it AND open it (easy to find on all devices)
-const worker = (window as any).html2pdf().set(opt).from(element).toPdf();
-const pdf = await worker.get('pdf');
-const blob: Blob = pdf.output('blob');
-
-// 1) Trigger a normal browser download (like Invoices)
-const blobUrl = URL.createObjectURL(blob);
-const a = document.createElement('a');
-a.href = blobUrl;
-a.download = opt.filename || 'Profit_Loss_Report.pdf';
-document.body.appendChild(a);
-a.click();
-a.remove();
-
-// 2) Also try to open the PDF in a new tab (mobile users can then "Save to Files"/Share)
-// If popups are blocked, the download still works.
-try { window.open(blobUrl, '_blank'); } catch {}
-
-// Cleanup later (give the browser time to start the download/open)
-setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-
+                            await (window as any).html2pdf().set(opt).from(element).save();
                             showToast('PDF exported successfully!', 'success');
                             setTimeout(() => setShowPLPreview(false), 1000);
                           } catch (error) {
